@@ -21,50 +21,62 @@ OUTPUT_FILE = BASE_DIR / "actual_token_count.json"
 tokenizer = tiktoken.get_encoding("cl100k_base")
 
 
+# replace the count_notebook_tokens function with this version
 def count_notebook_tokens(notebook_path: Path) -> dict:
-    """Count actual tokens in a Jupyter notebook using tiktoken"""
+    """Count actual tokens in a Jupyter notebook using tiktoken.
+    This counts:
+      - all cell.source strings (code/markdown/raw)
+      - any string values inside outputs (text, base64 images, etc.)
+    """
     try:
         with open(notebook_path, 'r', encoding='utf-8', errors='ignore') as f:
             nb = nbformat.read(f, as_version=4)
-        
-        total_tokens = 0
-        cell_tokens = 0
-        output_tokens = 0
-        
-        for cell in nb.cells:
-            # Count cell source
-            if cell.cell_type in ['code', 'markdown', 'raw']:
-                cell_text = cell.source
-                cell_tokens += len(tokenizer.encode(cell_text))
-            
-            # Count outputs for code cells
-            if cell.cell_type == 'code' and 'outputs' in cell:
-                for output in cell.outputs:
-                    if 'text' in output:
-                        text = output['text']
-                        if isinstance(text, list):
-                            text = ''.join(text)
-                        output_tokens += len(tokenizer.encode(str(text)))
-                    elif 'data' in output:
-                        for key, data in output['data'].items():
-                            if isinstance(data, str) and key.startswith('text/'):
-                                output_tokens += len(tokenizer.encode(data))
-        
-        total_tokens = cell_tokens + output_tokens
-        
-        return {
-            'success': True,
-            'total_tokens': total_tokens,
-            'cell_tokens': cell_tokens,
-            'output_tokens': output_tokens,
-            'size_bytes': os.path.getsize(notebook_path)
-        }
     except Exception as e:
-        return {
-            'success': False,
-            'error': str(e),
-            'size_bytes': 0
-        }
+        return {'success': False, 'error': f"read error: {e}", 'size_bytes': 0}
+
+    total = 0
+    cell_tokens = 0
+    output_tokens = 0
+
+    def count_any_string(obj):
+        """Recursively count tokens for any string values in obj."""
+        nonlocal total, output_tokens
+        if isinstance(obj, str):
+            n = len(tokenizer.encode(obj))
+            output_tokens += n
+            total += n
+        elif isinstance(obj, list):
+            for item in obj:
+                count_any_string(item)
+        elif isinstance(obj, dict):
+            for v in obj.values():
+                count_any_string(v)
+        # ignore non-string scalars (numbers, None, etc.)
+
+    for cell in nb.cells:
+        if cell.cell_type in ('code', 'markdown', 'raw'):
+            src = cell.get('source', '')
+            n = len(tokenizer.encode(src))
+            cell_tokens += n
+            total += n
+
+        if cell.cell_type == 'code' and 'outputs' in cell:
+            for output in cell['outputs']:
+                # count any string nested anywhere in output (text, base64 images, html, etc.)
+                count_any_string(output)
+
+    try:
+        size = notebook_path.stat().st_size
+    except:
+        size = 0
+
+    return {
+        'success': True,
+        'total_tokens': total,
+        'cell_tokens': cell_tokens,
+        'output_tokens': output_tokens,
+        'size_bytes': size
+    }
 
 
 def main():
