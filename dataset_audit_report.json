@@ -1,0 +1,12 @@
+{
+  "timestamp": "2025-11-13T12:24:34.405277",
+  "dataset_dir": "/Users/wheezycapowdis/Desktop/Jupyter-Notebooks-Script/notebooks_dataset",
+  "total_folder_bytes": 713027214362,
+  "total_ipynb_bytes": 63469078994,
+  "sample_notebooks": 100,
+  "sample_tokens": 670049,
+  "sample_bytes": 74296525,
+  "avg_tokens_per_byte": 0.009018577921376537,
+  "estimated_total_tokens": 572400834,
+  "estimated_tokens_in_billions": 0.57
+}

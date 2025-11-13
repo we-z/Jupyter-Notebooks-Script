@@ -42,7 +42,7 @@ def count_notebook_tokens(notebook_path: Path) -> dict:
         """Recursively count tokens for any string values in obj."""
         nonlocal total, output_tokens
         if isinstance(obj, str):
-            n = len(tokenizer.encode(obj))
+            n = len(tokenizer.encode(obj, disallowed_special=()))
             output_tokens += n
             total += n
         elif isinstance(obj, list):
@@ -56,7 +56,7 @@ def count_notebook_tokens(notebook_path: Path) -> dict:
     for cell in nb.cells:
         if cell.cell_type in ('code', 'markdown', 'raw'):
             src = cell.get('source', '')
-            n = len(tokenizer.encode(src))
+            n = len(tokenizer.encode(src, disallowed_special=()))
             cell_tokens += n
             total += n
 
