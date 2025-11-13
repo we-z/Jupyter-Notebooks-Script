@@ -1,0 +1,11 @@
+{
+  "timestamp": "2025-11-13T00:04:03.130101",
+  "notebooks_processed": 108721,
+  "notebooks_failed": 1228,
+  "total_tokens": 5614735346,
+  "cell_tokens": 637435139,
+  "output_tokens": 4977300207,
+  "total_size_bytes": 50294853295,
+  "tokenizer": "tiktoken cl100k_base (GPT-4)",
+  "tokens_in_billions": 5.61
+}

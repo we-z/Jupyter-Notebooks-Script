@@ -10,6 +10,7 @@ import json
 import time
 import subprocess
 import logging
+import argparse
 from datetime import datetime
 from pathlib import Path
 from typing import List, Dict, Optional
@@ -30,6 +31,7 @@ LOGS_DIR = BASE_DIR / "logs"
 CLONE_LOG_DIR = LOGS_DIR / "clone_logs"
 METADATA_FILE = BASE_DIR / "collection_metadata.json"
 STATS_FILE = BASE_DIR / "collection_stats.json"
+SEARCH_CACHE_FILE = BASE_DIR / "search_cache.json"
 
 # GitHub API settings
 GITHUB_API_BASE = "https://api.github.com"
@@ -339,8 +341,52 @@ def process_repository(repo_info: Dict) -> Dict:
     return result
 
 
-def discover_repositories() -> List[Dict]:
+def save_search_cache(repos: List[Dict]):
+    """Save discovered repositories to cache file"""
+    cache_data = {
+        "timestamp": datetime.now().isoformat(),
+        "total_repos": len(repos),
+        "repositories": repos
+    }
+    
+    with open(SEARCH_CACHE_FILE, 'w') as f:
+        json.dump(cache_data, f, indent=2)
+    
+    logger.info(f"💾 Search results cached to {SEARCH_CACHE_FILE}")
+    logger.info(f"   Cached {len(repos)} repositories")
+
+
+def load_search_cache() -> Optional[List[Dict]]:
+    """Load repositories from cache file if it exists"""
+    if not SEARCH_CACHE_FILE.exists():
+        return None
+    
+    try:
+        with open(SEARCH_CACHE_FILE, 'r') as f:
+            cache_data = json.load(f)
+        
+        repos = cache_data.get('repositories', [])
+        timestamp = cache_data.get('timestamp', 'unknown')
+        
+        logger.info(f"📂 Loaded {len(repos)} repositories from cache")
+        logger.info(f"   Cache timestamp: {timestamp}")
+        
+        return repos
+    except Exception as e:
+        logger.warning(f"⚠️  Failed to load search cache: {e}")
+        return None
+
+
+def discover_repositories(use_cache: bool = True) -> List[Dict]:
     """Discover repositories containing Jupyter notebooks"""
+    
+    # Try to load from cache first
+    if use_cache:
+        cached_repos = load_search_cache()
+        if cached_repos:
+            logger.info("✅ Using cached search results")
+            return cached_repos
+    
     logger.info("🔍 Discovering repositories with Jupyter Notebooks...")
     
     all_repos = []
@@ -427,6 +473,10 @@ def discover_repositories() -> List[Dict]:
             break
     
     logger.info(f"🎯 Total repositories discovered: {len(all_repos)}")
+    
+    # Save to cache for future runs
+    save_search_cache(all_repos)
+    
     return all_repos
 
 
@@ -452,7 +502,7 @@ def save_metadata(repos_processed: List[Dict]):
     logger.info(f"💾 Metadata saved to {METADATA_FILE}")
 
 
-def main():
+def main(use_cache: bool = True):
     """Main collection process"""
     logger.info("=" * 80)
     logger.info("JUPYTER NOTEBOOK DATASET COLLECTOR")
@@ -460,6 +510,7 @@ def main():
     logger.info(f"Target: {TARGET_TOKENS:,} tokens ({TARGET_TOKENS / 1e9:.0f}B)")
     logger.info(f"Output directory: {NOTEBOOKS_DIR}")
     logger.info(f"Log directory: {LOGS_DIR}")
+    logger.info(f"Cache enabled: {use_cache}")
     logger.info("=" * 80)
     
     # Check GitHub API access
@@ -472,7 +523,7 @@ def main():
         return
     
     # Discover repositories
-    repos = discover_repositories()
+    repos = discover_repositories(use_cache=use_cache)
     
     if not repos:
         logger.error("❌ No repositories found!")
@@ -518,8 +569,33 @@ def main():
 
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser(
+        description="Collect Jupyter Notebooks from GitHub repositories",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  python collect_notebooks.py              # Use cached search results if available
+  python collect_notebooks.py --no-cache   # Force fresh GitHub search
+  python collect_notebooks.py --refresh    # Same as --no-cache
+        """
+    )
+    parser.add_argument(
+        '--no-cache', 
+        dest='use_cache',
+        action='store_false',
+        help='Bypass search cache and perform fresh GitHub search'
+    )
+    parser.add_argument(
+        '--refresh',
+        dest='use_cache', 
+        action='store_false',
+        help='Alias for --no-cache'
+    )
+    
+    args = parser.parse_args()
+    
     try:
-        main()
+        main(use_cache=args.use_cache)
     except KeyboardInterrupt:
         logger.info("\n⚠️  Collection interrupted by user")
         stats.save()
